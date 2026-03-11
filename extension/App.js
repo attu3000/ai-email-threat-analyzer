@@ -1,5 +1,4 @@
-import React, { useState } from "https://esm.sh/react@18";
-
+import React, { useState } from "react";
 const createElement = React.createElement;
 
 export default function App() {
