@@ -1,0 +1,33 @@
+{
+  "name": "ai-email-threat-analyzer",
+  "version": "1.0.0",
+  "description": "AI-powered Chrome extension that analyzes emails for phishing and social engineering threats using an LLM-powered backend.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/attu3000/ai-email-threat-analyzer.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/attu3000/ai-email-threat-analyzer/issues"
+  },
+  "homepage": "https://github.com/attu3000/ai-email-threat-analyzer#readme",
+  "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.4",
+    "vite": "^7.3.1"
+  }
+}
