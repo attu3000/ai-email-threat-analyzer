@@ -1,14 +1,26 @@
-{
+  {
     "manifest_version": 3,
-    "name": "AI Email Threat Analyzer",
-    "version": "0.1.0",
-    "description": "Analyze email text for phishing indicators.",
-    "action": {
-      "default_popup": "dist/extension/popup.html"
+    "name": "PhishGuard",
+    "version": "1.0.0",
+    "description": "AI-powered email threat analyzer that detects phishing and suspicious messages.",
+    "permissions": ["activeTab", "scripting"],
+    "host_permissions": ["http://localhost:8000/*"],
+    "icons": {
+      "16": "icons/logo.png",
+      "32": "icons/logo.png",
+      "48": "icons/logo.png",
+      "128": "icons/logo.png"
     },
-    "permissions": ["storage"],
-    "host_permissions": [
-      "http://127.0.0.1:8000/*",
-      "http://localhost:8000/*"
-    ]
+    
+    "action": {
+      "default_popup": "popup.html",
+      "default_icon": {
+        "16": "icons/logo.png",
+        "32": "icons/logo.png",
+        "48": "icons/logo.png"
+      }
+    },
+    "background": {
+      "service_worker": "service-worker.js"
+    }
   }
