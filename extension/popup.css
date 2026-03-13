@@ -1,66 +1,98 @@
 body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-    width: 380px;
-    background: #f7f7f7;
-  }
-  
-  .container {
-    padding: 16px;
-  }
-  
-  h1 {
-    font-size: 18px;
-    margin-top: 0;
-    margin-bottom: 16px;
-  }
-  
-  label {
-    display: block;
-    margin-top: 10px;
-    margin-bottom: 4px;
-    font-weight: 600;
-  }
-  
-  input,
-  textarea {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-  }
-  
-  textarea {
-    resize: vertical;
-  }
-  
-  button {
-    margin-top: 14px;
-    width: 100%;
-    padding: 10px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 600;
-  }
-  
-  button:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
-  }
-  
-  .result {
-    margin-top: 16px;
-    padding: 12px;
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-  }
-  
-  .error {
-    margin-top: 12px;
-    color: #b00020;
-    font-size: 14px;
-  }
+  font-family: Arial, sans-serif;
+  width: 340px;
+  margin: 0;
+  padding: 16px;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  margin-bottom: 8px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.subtitle {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+button {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: #2563eb;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+button:hover {
+  background: #1d4ed8;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+#status {
+  font-size: 13px;
+  color: #475569;
+  min-height: 0;
+}
+
+#status:empty {
+  display: none;
+}
+
+#result {
+  display: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.5;
+  background: white;
+  border: 1px solid #e5e7eb;
+  padding: 14px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  color: #1f2937;
+  margin: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+#result:not(:empty) {
+  display: block;
+}

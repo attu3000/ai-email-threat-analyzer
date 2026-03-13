@@ -1,14 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Email Threat Analyzer</title>
+    <meta charset="utf-8" />
+    <title>PhishGuard</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <div id="root"></div>
+    <div class="container">
+      <div class="header">
+        <img src="icons/logo.png" alt="PhishGuard logo" class="logo" />
+        <h1>PhishGuard</h1>
+        <p class="subtitle">AI Email Threat Analyzer</p>
+      </div>
 
-    <script type="module" src="popup.js"></script>
+      <button id="scanBtn">Scan current email</button>
+
+      <div id="status"></div>
+
+      <pre id="result"></pre>
+    </div>
+
+    <script src="popup.js"></script>
   </body>
 </html>

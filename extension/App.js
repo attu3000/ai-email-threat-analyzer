@@ -32,16 +32,19 @@ export default function App() {
           body
         })
       });
-
+      
       if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(
+          errorData?.detail || `Server error: ${response.status}`
+        );
       }
 
       const data = await response.json();
       setResult(data);
     } catch (err) {
       console.error(err);
-      setError("Could not connect to the backend. Make sure FastAPI is running on port 8000.");
+      setError(err.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
