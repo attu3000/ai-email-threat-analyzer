@@ -67,7 +67,8 @@ scanBtn.addEventListener("click", async () => {
       ...features,
       risk_score: localRisk.risk_score,
       classification: localRisk.classification,
-      flags: localRisk.flags
+      flags: localRisk.flags,
+      strong_signals: localRisk.strong_signals || []
     };
 
     statusEl.textContent = "Fetching AI explanation...";

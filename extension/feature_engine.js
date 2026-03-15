@@ -58,6 +58,9 @@
     /\bfree-?gift\b/i
   ];
 
+  const SUSPICIOUS_TLDS = new Set(["zip", "top", "click", "gq", "work", "country", "kim", "xyz"]);
+  const DOMAIN_TOKEN_STOPWORDS = new Set(["mail", "email", "auth", "login", "support", "cdn", "api", "app", "secure"]);
+
   function normalizeText(value) {
     return (value || "").replace(/\s+/g, " ").trim();
   }
@@ -129,14 +132,65 @@
     return dedupe(signals);
   }
 
-  function getTopLevelDomain(hostname) {
-    const parts = hostname.split(".");
+  function getBaseDomain(hostname) {
+    const parts = (hostname || "").split(".").filter(Boolean);
+    if (parts.length <= 2) {
+      return parts.join(".");
+    }
+
+    const secondLevel = parts[parts.length - 2];
+    const countryCode = parts[parts.length - 1];
+    const secondLevelTlds = new Set(["co", "com", "org", "net", "gov", "edu"]);
+    if (countryCode.length === 2 && secondLevelTlds.has(secondLevel) && parts.length >= 3) {
+      return parts.slice(-3).join(".");
+    }
     return parts.slice(-2).join(".");
+  }
+
+  function getDomainTokens(domain) {
+    return (domain || "")
+      .replace(/\.[a-z]{2,}$/i, "")
+      .split(/[^a-z0-9]+/i)
+      .map((token) => token.toLowerCase())
+      .filter((token) => token.length >= 4 && !DOMAIN_TOKEN_STOPWORDS.has(token));
+  }
+
+  function isCommonServiceSubdomain(hostname) {
+    return /\b(auth|login|support|help|cdn|static|assets|status|accounts?)\b/i.test(hostname || "");
+  }
+
+  function isSenderLinkRelated(senderDomain, hostname) {
+    if (!senderDomain || !hostname) {
+      return false;
+    }
+
+    const senderBase = getBaseDomain(senderDomain);
+    const linkBase = getBaseDomain(hostname);
+
+    if (!senderBase || !linkBase) {
+      return false;
+    }
+
+    if (senderBase === linkBase) {
+      return true;
+    }
+
+    const senderTokens = getDomainTokens(senderBase);
+    const linkTokens = getDomainTokens(linkBase);
+    const sharesBrandToken = senderTokens.some((token) => linkTokens.includes(token));
+
+    // Allow common same-brand auth/support/cdn patterns when there are no other strong signals.
+    if (sharesBrandToken && (isCommonServiceSubdomain(hostname) || isCommonServiceSubdomain(senderDomain))) {
+      return true;
+    }
+
+    return sharesBrandToken;
   }
 
   function detectLinkSignals(links, senderDomain) {
     const suspiciousFlags = [];
     const linkDomains = [];
+    const linkUrls = [];
     let domainMismatch = false;
 
     for (const link of links || []) {
@@ -149,6 +203,7 @@
       const hostname = toHostname(href);
       if (hostname) {
         linkDomains.push(hostname);
+        linkUrls.push(href);
       }
 
       if (!/^https:\/\//i.test(href)) {
@@ -160,14 +215,25 @@
       if (hostname.includes("xn--")) {
         suspiciousFlags.push("punycode_link");
       }
+      if ((hostname.match(/-/g) || []).length >= 3) {
+        suspiciousFlags.push("excessive_hyphens_link");
+      }
+      if (hostname.length > 45) {
+        suspiciousFlags.push("long_hostname_link");
+      }
+      const tld = hostname.split(".").pop() || "";
+      if (SUSPICIOUS_TLDS.has(tld)) {
+        suspiciousFlags.push("suspicious_tld_link");
+      }
+      if (/\b(login|verify|secure|password|credential|wallet|invoice)\b/i.test(hostname)) {
+        suspiciousFlags.push("credential_lure_hostname_link");
+      }
       if (SUSPICIOUS_DOMAIN_PATTERNS.some((pattern) => pattern.test(hostname))) {
         suspiciousFlags.push("suspicious_domain_pattern");
       }
 
       if (senderDomain && hostname) {
-        const senderTld = getTopLevelDomain(senderDomain);
-        const linkTld = getTopLevelDomain(hostname);
-        if (senderTld && linkTld && senderTld !== linkTld) {
+        if (!isSenderLinkRelated(senderDomain, hostname)) {
           domainMismatch = true;
         }
       }
@@ -182,6 +248,7 @@
 
     return {
       link_domains: dedupe(linkDomains),
+      link_urls: dedupe(linkUrls).slice(0, 15),
       link_count: (links || []).length,
       suspicious_link_flags: dedupe(suspiciousFlags),
       domain_mismatch: domainMismatch
@@ -205,6 +272,7 @@
       body_flags: categorySignals.body_flags,
       highlighted_phrases: categorySignals.highlighted_phrases,
       link_domains: linkSignals.link_domains,
+      link_urls: linkSignals.link_urls,
       link_count: linkSignals.link_count,
       suspicious_link_flags: linkSignals.suspicious_link_flags,
       generic_greeting: genericGreeting,

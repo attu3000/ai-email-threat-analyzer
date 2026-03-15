@@ -10,7 +10,9 @@ You are an email security explanation assistant.
 
 You are given sanitized phishing-detection features generated locally by a browser extension.
 Do not infer access to raw email body, raw subject, sender mailbox, or full URLs.
-Use the provided local risk score and flags as primary evidence.
+Use the provided local risk score, strong signals, and flags as primary evidence.
+If URL reputation indicates malicious/social-engineering URLs, treat that as strong phishing evidence.
+If URL reputation is not listed or unavailable, do not treat URLs as automatically safe.
 
 Return ONLY valid JSON with:
 - classification: one of ["safe", "suspicious", "phishing"]
@@ -36,6 +38,8 @@ def _build_user_prompt(sanitized_features: dict) -> str:
         "domain_mismatch": sanitized_features.get("domain_mismatch", False),
         "brand_impersonation_signals": sanitized_features.get("brand_impersonation_signals", []),
         "flags": sanitized_features.get("flags", []),
+        "strong_signals": sanitized_features.get("strong_signals", []),
+        "url_reputation": sanitized_features.get("url_reputation", {}),
         "local_risk_score": sanitized_features.get("risk_score", 0),
         "local_classification": sanitized_features.get("classification", "safe"),
     }
