@@ -71,6 +71,18 @@ def apply_reputation_to_local_result(payload: Dict[str, Any], url_reputation: Di
     return payload
 
 
+def select_urls_for_reputation(payload: Dict[str, Any]) -> List[str]:
+    urls = list(dict.fromkeys(payload.get("link_urls", [])[:15]))
+    if not urls:
+        return []
+
+    suspicious_flags = payload.get("suspicious_link_flags", [])
+    # Privacy/API-minimizing strategy: check more URLs only when local link signals already look suspicious.
+    if suspicious_flags:
+        return urls[:8]
+    return urls[:2]
+
+
 @app.get("/")
 def root():
     return {"message": "AI Email Threat Analyzer API is running"}
@@ -81,7 +93,8 @@ def analyze_email(payload: SanitizedEmailInput):
     try:
         serialized = payload.model_dump()
         # Privacy note: only extracted URLs are sent to remote reputation checks, never raw body/subject.
-        url_reputation = reputation_service.lookup_urls(serialized.get("link_urls", []))
+        urls_to_check = select_urls_for_reputation(serialized)
+        url_reputation = reputation_service.lookup_urls(urls_to_check)
         enriched = apply_reputation_to_local_result(serialized, url_reputation)
 
         result = analyze_with_ai(enriched)
