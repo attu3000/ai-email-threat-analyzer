@@ -26,17 +26,72 @@ function buildFallbackResult(localRisk) {
   };
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function titleCase(value) {
+  return String(value || "unknown").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getRiskTone(score) {
+  if (score >= 80) {
+    return "high";
+  }
+  if (score >= 50) {
+    return "medium";
+  }
+  return "low";
+}
+
+function renderBulletList(items, emptyMessage) {
+  const listItems = (items || []).length
+    ? items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
+    : `<li class=\"muted\">${emptyMessage}</li>`;
+
+  return `<ul>${listItems}</ul>`;
+}
+
 function renderResult(data) {
-  resultEl.textContent =
-    `Classification: ${data.classification}\n` +
-    `Risk Score: ${data.risk_score}\n\n` +
-    `Reasons:\n- ${data.reasons.join("\n- ")}\n\n` +
-    `Highlighted Phrases:\n- ${(data.highlighted_phrases || []).join("\n- ")}\n\n` +
-    `Recommended Action:\n${data.recommended_action}`;
+  const score = Number(data.risk_score) || 0;
+  const tone = getRiskTone(score);
+
+  resultEl.classList.remove("low", "medium", "high");
+  resultEl.classList.add(tone);
+
+  resultEl.innerHTML = `
+    <section class="result-summary">
+      <div class="pill pill-${tone}">${escapeHtml(titleCase(data.classification))}</div>
+      <div class="score-wrap">
+        <span class="score-label">Risk Score</span>
+        <span class="score-value">${score}</span>
+      </div>
+    </section>
+
+    <section class="result-section">
+      <h2>Why this rating</h2>
+      ${renderBulletList(data.reasons, "No reasons provided by analyzer.")}
+    </section>
+
+    <section class="result-section">
+      <h2>Highlighted phrases</h2>
+      ${renderBulletList(data.highlighted_phrases, "No risky phrases highlighted.")}
+    </section>
+
+    <section class="result-section">
+      <h2>Recommended action</h2>
+      <p>${escapeHtml(data.recommended_action)}</p>
+    </section>
+  `;
 }
 
 scanBtn.addEventListener("click", async () => {
-  resultEl.textContent = "";
+  resultEl.innerHTML = "";
   statusEl.textContent = "Reading current Gmail message...";
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
