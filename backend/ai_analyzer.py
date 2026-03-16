@@ -6,44 +6,46 @@ from dotenv import load_dotenv
 load_dotenv()
 
 SYSTEM_PROMPT = """
-You are an email security explanation assistant.
+You are an email security contextual verification assistant.
 
-You are given sanitized phishing-detection features generated locally by a browser extension.
-Do not infer access to raw email body, raw subject, sender mailbox, or full URLs.
-Use the provided local risk score, strong signals, and flags as primary evidence.
-If URL reputation indicates malicious/social-engineering URLs, treat that as strong phishing evidence.
-If URL reputation is not listed or unavailable, do not treat URLs as automatically safe.
+You receive:
+- local_features/local_risk_score/local_classification from local first-pass detectors.
+- normalized_subject and normalized_body (privacy-preserving placeholders, not raw email text).
+- link domain and reputation data.
+
+Rules:
+1) Treat local risk as prior evidence, not a final answer.
+2) Use normalized content for context; do not assume missing details.
+3) Account confirmation alone is not phishing evidence.
+4) Legitimate onboarding/reset flows can include links and action requests.
+5) Multiple links to the same legitimate domain with clean reputation are positive signals.
+6) Raise risk materially only with evidence of deception/impersonation, visible-vs-actual mismatch,
+   malicious/suspicious links, credential harvesting patterns, or coercive urgency.
+7) For weak/mixed evidence, prefer lower scores with cautious reasoning.
+8) Never invent raw sender/recipient addresses or hidden content.
 
 Return ONLY valid JSON with:
 - classification: one of ["safe", "suspicious", "phishing"]
 - risk_score: integer from 0 to 100
 - reasons: list of short strings (3-6 items)
-- highlighted_phrases: list of suspicious phrases from provided sanitized phrases only
+- highlighted_phrases: list of short snippets found in normalized_body/normalized_subject
 - recommended_action: short user-friendly advice
-
-Keep output stable and concise.
 """
 
 
-def _build_user_prompt(sanitized_features: dict) -> str:
+def _build_user_prompt(payload: dict) -> str:
     prompt_data = {
-        "sender_domain": sanitized_features.get("sender_domain", ""),
-        "subject_flags": sanitized_features.get("subject_flags", {}),
-        "body_flags": sanitized_features.get("body_flags", {}),
-        "highlighted_phrases": sanitized_features.get("highlighted_phrases", [])[:12],
-        "link_domains": sanitized_features.get("link_domains", [])[:10],
-        "link_count": sanitized_features.get("link_count", 0),
-        "suspicious_link_flags": sanitized_features.get("suspicious_link_flags", []),
-        "generic_greeting": sanitized_features.get("generic_greeting", False),
-        "domain_mismatch": sanitized_features.get("domain_mismatch", False),
-        "brand_impersonation_signals": sanitized_features.get("brand_impersonation_signals", []),
-        "flags": sanitized_features.get("flags", []),
-        "strong_signals": sanitized_features.get("strong_signals", []),
-        "url_reputation": sanitized_features.get("url_reputation", {}),
-        "local_risk_score": sanitized_features.get("risk_score", 0),
-        "local_classification": sanitized_features.get("classification", "safe"),
+        "sender_domain": payload.get("sender_domain", ""),
+        "normalized_subject": payload.get("normalized_subject", ""),
+        "normalized_body": payload.get("normalized_body", "")[:5000],
+        "links": payload.get("links", []),
+        "local_features": payload.get("local_features", {}),
+        "local_risk_score": payload.get("local_risk_score", 0),
+        "local_classification": payload.get("local_classification", "safe"),
+        "positive_signals": payload.get("positive_signals", []),
+        "url_reputation_summary": payload.get("url_reputation_summary", {}),
     }
-    return f"Sanitized analysis context: {json.dumps(prompt_data)}"
+    return f"Normalized email analysis context: {json.dumps(prompt_data)}"
 
 
 def analyze_with_ai(sanitized_features: dict) -> dict:

@@ -1,7 +1,7 @@
 (function () {
   const WEIGHTS = {
     urgency_language: 6,
-    deadline_pressure: 6,
+    deadline_pressure: 4,
     threat_of_consequence: 16,
     credential_request: 18,
     account_security_action: 6,
@@ -16,7 +16,11 @@
     text_destination_mismatch: 22,
     punycode_or_ip_link: 24,
     suspicious_link_structure: 14,
-    strong_brand_impersonation: 22
+    strong_brand_impersonation: 22,
+    coercive_urgency: 10,
+    weak_time_window: -4,
+    onboarding_positive_signal: -8,
+    domain_consistency_positive_signal: -6
   };
 
   const STRONG_LINK_FLAGS = new Set([
@@ -103,13 +107,32 @@
       strongSignals.push("suspicious_link_structure");
     }
 
+
+    if (features.urgency_profile?.coercive) {
+      score += WEIGHTS.coercive_urgency;
+      strongSignals.push("coercive_urgency");
+    }
+
+    if (features.urgency_profile?.weak) {
+      score += WEIGHTS.weak_time_window;
+    }
+
+    const positiveSignals = features.positive_signals || [];
+    if (positiveSignals.includes("welcome_or_account_activation_flow")) {
+      score += WEIGHTS.onboarding_positive_signal;
+    }
+
+    if (positiveSignals.includes("sender_domain_matches_service_domain") && !features.domain_mismatch) {
+      score += WEIGHTS.domain_consistency_positive_signal;
+    }
+
     if (features.url_reputation?.malicious) {
       score += WEIGHTS.malicious_url_reputation;
       strongSignals.push("malicious_url_reputation");
       flags.push("malicious_url_reputation");
     }
 
-    const riskScore = Math.min(100, score);
+    const riskScore = Math.max(0, Math.min(100, score));
     let classification = "safe";
 
     // Domain mismatch or soft pressure language alone should not trigger phishing.
