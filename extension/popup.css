@@ -1,9 +1,11 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
 body {
-  font-family: Arial, sans-serif;
+  font-family: "Inter", "Segoe UI", Roboto, sans-serif;
   width: 340px;
   margin: 0;
   padding: 16px;
-  background: #f8fafc;
+  background: linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%);
   color: #111827;
 }
 
@@ -45,16 +47,19 @@ button {
   padding: 12px;
   border: none;
   border-radius: 10px;
-  background: #2563eb;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
   color: white;
   font-size: 14px;
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
-  transition: background 0.2s ease, transform 0.1s ease;
+  transition: transform 0.1s ease, box-shadow 0.2s ease;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.2);
 }
 
 button:hover {
-  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.24);
 }
 
 button:active {
@@ -64,6 +69,7 @@ button:active {
 button:disabled {
   background: #93c5fd;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 #status {
@@ -78,21 +84,107 @@ button:disabled {
 
 #result {
   display: none;
-  white-space: pre-wrap;
   word-break: break-word;
   font-size: 13px;
   line-height: 1.5;
   background: white;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e2e8f0;
   padding: 14px;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
   color: #1f2937;
   margin: 0;
-  max-height: 320px;
+  max-height: 360px;
   overflow-y: auto;
 }
 
 #result:not(:empty) {
   display: block;
+}
+
+.result-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.pill-low {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.pill-medium {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.pill-high {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.score-wrap {
+  text-align: right;
+}
+
+.score-label {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.score-value {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.result-section {
+  margin-top: 12px;
+}
+
+.result-section h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 6px;
+  color: #334155;
+}
+
+.result-section ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.result-section p {
+  margin: 0;
+}
+
+.muted {
+  color: #64748b;
+  font-style: italic;
+}
+
+#result.low {
+  border-left: 4px solid #22c55e;
+}
+
+#result.medium {
+  border-left: 4px solid #f59e0b;
+}
+
+#result.high {
+  border-left: 4px solid #ef4444;
 }
