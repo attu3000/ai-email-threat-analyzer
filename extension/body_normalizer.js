@@ -1,6 +1,6 @@
 (function () {
   const MAX_BODY_CHARS = 7000;
-  const MAX_SELECTED_LINES = 22;
+  const MAX_SELECTED_LINES = 26;
 
   const EMAIL_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
   const PHONE_REGEX = /\b(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b/g;
@@ -10,9 +10,26 @@
   const TOKEN_REGEX = /\b[A-Za-z0-9_-]{24,}\b/g;
   const NAME_HEADER_REGEX = /\b(?:hi|hello|dear)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})(?=[,!.?\s]|$)/gi;
 
-  const CTA_REGEX = /\b(click|confirm|verify|review|reset|login|log in|sign in|activate|update|open|visit|continue)\b/i;
-  const URGENCY_REGEX = /\b(immediately|urgent|asap|right away|within\s+\d+\s*(?:minutes?|hours?|days?)|today|now|expire|suspension|locked|disabled|final notice)\b/i;
-  const ACCOUNT_REGEX = /\b(account|password|credentials|security|verification|confirm email|sign in|log in|mfa|2fa|otp)\b/i;
+  const CTA_REGEX = /\b(click|confirm|verify|review|reset|login|log in|sign in|activate|update|open|visit|continue|download|view)\b/i;
+  const DEADLINE_REGEX = /\b(within\s+\d+\s*(?:minutes?|hours?|days?)|by\s+\[DATE\]|by\s+end of day|expires?|expiration|deadline|final notice)\b/i;
+  const ALL_CAPS_REGEX = /\b[A-Z]{4,}\b/;
+
+  const HOSTED_CONTENT_DOMAINS = [
+    "sites.google.com",
+    "storage.googleapis.com",
+    "drive.google.com",
+    "docs.google.com",
+    "github.io",
+    "notion.site",
+    "webflow.io",
+    "pages.dev",
+    "netlify.app",
+    "vercel.app",
+    "firebaseapp.com",
+    "onrender.com",
+    "azurewebsites.net",
+    "herokuapp.com"
+  ];
 
   function normalizeText(value) {
     return (value || "").replace(/\s+/g, " ").trim();
@@ -48,6 +65,11 @@
     }
   }
 
+  function isHostedContentDomain(hostname) {
+    const base = baseDomain(hostname);
+    return HOSTED_CONTENT_DOMAINS.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`) || base === domain);
+  }
+
   function normalizeLink(url) {
     const parsed = parseUrl(url);
     if (!parsed || !parsed.hostname) {
@@ -79,7 +101,7 @@
       .replace(ADDRESS_REGEX, "[ADDRESS]")
       .replace(ID_REGEX, "[ID]")
       .replace(DATE_REGEX, "[DATE]")
-      .replace(NAME_HEADER_REGEX, (full) => full.split(/\s+/)[0] + " [NAME]")
+      .replace(NAME_HEADER_REGEX, (full) => `${full.split(/\s+/)[0]} [NAME]`)
       .replace(TOKEN_REGEX, "[TOKEN]");
   }
 
@@ -91,15 +113,14 @@
     if (!line) {
       return false;
     }
-    return CTA_REGEX.test(line) || URGENCY_REGEX.test(line) || ACCOUNT_REGEX.test(line) || /\[LINK_TO_DOMAIN:/.test(line);
+    return CTA_REGEX.test(line) || DEADLINE_REGEX.test(line) || ALL_CAPS_REGEX.test(line) || /\[LINK_TO_DOMAIN:/.test(line);
   }
 
   function selectRelevantLines(lines) {
     const selected = new Set();
 
     lines.forEach((line, index) => {
-      const relevant = isRelevantLine(line);
-      if (!relevant) {
+      if (!isRelevantLine(line)) {
         return;
       }
 
@@ -136,7 +157,8 @@
       normalized.push({
         actual_domain: linkInfo.actual_domain,
         visible_domain: visible || null,
-        sanitized_url: linkInfo.sanitized_url
+        sanitized_url: linkInfo.sanitized_url,
+        is_hosted_content_platform: isHostedContentDomain(linkInfo.actual_domain)
       });
     }
 
@@ -144,21 +166,18 @@
   }
 
   function appendLinkContext(line, links) {
-    if (!line) {
+    if (!line || !links.length) {
       return line;
     }
 
-    let enriched = line;
-    for (const link of links) {
-      const actualToken = `[LINK_TO_DOMAIN: ${baseDomain(link.actual_domain) || link.actual_domain}]`;
+    const tokens = links.slice(0, 3).map((link) => {
       if (link.visible_domain && baseDomain(link.visible_domain) !== baseDomain(link.actual_domain)) {
-        enriched += ` ${`[VISIBLE_DOMAIN: ${baseDomain(link.visible_domain)} | ACTUAL_DOMAIN: ${baseDomain(link.actual_domain)}]`}`;
-      } else {
-        enriched += ` ${actualToken}`;
+        return `[VISIBLE_DOMAIN: ${baseDomain(link.visible_domain)} | ACTUAL_DOMAIN: ${baseDomain(link.actual_domain)}]`;
       }
-    }
+      return `[LINK_TO_DOMAIN: ${baseDomain(link.actual_domain) || link.actual_domain}]`;
+    });
 
-    return enriched.trim();
+    return `${line} ${tokens.join(" ")}`.trim();
   }
 
   function buildNormalizedBody(email) {
@@ -166,15 +185,14 @@
     const originalBody = normalizeText(rawBody);
     const links = linkReferences(email?.links || []);
 
-
-    const lines = normalizeSentence(rawBody)
+    const normalizedLines = normalizeSentence(rawBody)
       .split(/\n+/)
       .map((line) => normalizeText(line))
       .filter(Boolean);
 
-    const isLong = originalBody.length > MAX_BODY_CHARS || lines.length > 40;
-    const selectedLines = isLong ? selectRelevantLines(lines) : lines;
-    const bodyWithLinkContext = selectedLines.map((line, index) => (index === 0 ? appendLinkContext(line, links.slice(0, 3)) : line));
+    const isLong = originalBody.length > MAX_BODY_CHARS || normalizedLines.length > 40;
+    const selectedLines = isLong ? selectRelevantLines(normalizedLines) : normalizedLines;
+    const bodyWithLinkContext = selectedLines.map((line, index) => (index === 0 ? appendLinkContext(line, links) : line));
 
     return {
       normalized_body: bodyWithLinkContext.join("\n").slice(0, 5000),
@@ -188,23 +206,6 @@
     const normalizedSubject = buildNormalizedSubject(email?.subject);
     const normalizedBodyData = buildNormalizedBody(email);
 
-    const positiveSignals = [];
-    const bodyLower = normalizedBodyData.normalized_body.toLowerCase();
-
-    if (/\b(welcome|create account|confirm email|account confirmation|activate your account)\b/.test(bodyLower)) {
-      positiveSignals.push("onboarding_or_account_activation_flow");
-    }
-
-    if (!localFeatures.domain_mismatch && senderDomain) {
-      positiveSignals.push("sender_domain_matches_link_context");
-    }
-
-    const linkDomains = normalizedBodyData.links.map((l) => baseDomain(l.actual_domain)).filter(Boolean);
-    const uniqueLinkDomains = Array.from(new Set(linkDomains));
-    if (uniqueLinkDomains.length === 1 && uniqueLinkDomains[0]) {
-      positiveSignals.push("links_point_to_single_domain");
-    }
-
     return {
       sender_domain: senderDomain,
       normalized_subject: normalizedSubject,
@@ -213,12 +214,20 @@
         actual_domain: baseDomain(link.actual_domain) || link.actual_domain,
         visible_domain: link.visible_domain ? baseDomain(link.visible_domain) : null,
         sanitized_url: link.sanitized_url,
-        reputation: "unknown"
+        reputation: "unknown",
+        is_hosted_content_platform: link.is_hosted_content_platform
       })),
-      local_features: localFeatures,
+      local_evidence: {
+        sender_link_match: localFeatures.sender_link_match,
+        visible_actual_mismatch: localFeatures.visible_actual_mismatch,
+        links_all_same_domain: localFeatures.links_all_same_domain,
+        hosted_content_domain_present: localFeatures.hosted_content_domain_present,
+        ip_link_present: localFeatures.ip_link_present,
+        punycode_present: localFeatures.punycode_present,
+        suspicious_sender_domain_structure: localFeatures.suspicious_sender_domain_structure
+      },
       local_risk_score: localRisk.risk_score,
-      local_classification: localRisk.classification,
-      positive_signals: Array.from(new Set(positiveSignals))
+      local_classification: localRisk.classification
     };
   }
 
