@@ -63,13 +63,7 @@ scanBtn.addEventListener("click", async () => {
     const features = window.FeatureEngine.buildSanitizedFeatures(response.email);
     const localRisk = window.RiskEngine.scoreRisk(features);
 
-    const payload = {
-      ...features,
-      risk_score: localRisk.risk_score,
-      classification: localRisk.classification,
-      flags: localRisk.flags,
-      strong_signals: localRisk.strong_signals || []
-    };
+    const aiPayload = window.EmailNormalizer.buildAiContext(response.email, features, localRisk);
 
     statusEl.textContent = "Fetching AI explanation...";
     let data;
@@ -80,7 +74,7 @@ scanBtn.addEventListener("click", async () => {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(aiPayload)
       });
 
       if (!apiRes.ok) {

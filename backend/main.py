@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from ai_analyzer import analyze_with_ai
 from url_reputation import URLReputationService
 
@@ -17,22 +17,22 @@ app.add_middleware(
 )
 
 
+class LinkInput(BaseModel):
+    actual_domain: str
+    visible_domain: Optional[str] = None
+    sanitized_url: Optional[str] = None
+    reputation: str = "unknown"
+
+
 class SanitizedEmailInput(BaseModel):
     sender_domain: str = ""
-    subject_flags: Dict[str, bool] = Field(default_factory=dict)
-    body_flags: Dict[str, bool] = Field(default_factory=dict)
-    highlighted_phrases: List[str] = Field(default_factory=list)
-    link_domains: List[str] = Field(default_factory=list)
-    link_urls: List[str] = Field(default_factory=list)
-    link_count: int = 0
-    suspicious_link_flags: List[str] = Field(default_factory=list)
-    generic_greeting: bool = False
-    domain_mismatch: bool = False
-    brand_impersonation_signals: List[str] = Field(default_factory=list)
-    flags: List[str] = Field(default_factory=list)
-    strong_signals: List[str] = Field(default_factory=list)
-    risk_score: int = 0
-    classification: str = "safe"
+    normalized_subject: str = ""
+    normalized_body: str = ""
+    links: List[LinkInput] = Field(default_factory=list)
+    local_features: Dict[str, Any] = Field(default_factory=dict)
+    local_risk_score: int = 0
+    local_classification: str = "safe"
+    positive_signals: List[str] = Field(default_factory=list)
 
 
 class AnalysisResult(BaseModel):
@@ -43,44 +43,15 @@ class AnalysisResult(BaseModel):
     recommended_action: str
 
 
-def apply_reputation_to_local_result(payload: Dict[str, Any], url_reputation: Dict[str, Any]) -> Dict[str, Any]:
-    risk_score = int(payload.get("risk_score", 0))
-    classification = payload.get("classification", "safe")
-    strong_signals = list(payload.get("strong_signals", []))
-    flags = list(payload.get("flags", []))
-
-    if url_reputation.get("malicious"):
-        risk_score = min(100, risk_score + 35)
-        if "malicious_url_reputation" not in strong_signals:
-            strong_signals.append("malicious_url_reputation")
-        if "malicious_url_reputation" not in flags:
-            flags.append("malicious_url_reputation")
-
-    if strong_signals and risk_score >= 65:
-        classification = "phishing"
-    elif risk_score >= 30:
-        classification = "suspicious"
-    else:
-        classification = "safe"
-
-    payload["risk_score"] = risk_score
-    payload["classification"] = classification
-    payload["strong_signals"] = strong_signals
-    payload["flags"] = flags
-    payload["url_reputation"] = url_reputation
-    return payload
-
-
-def select_urls_for_reputation(payload: Dict[str, Any]) -> List[str]:
-    urls = list(dict.fromkeys(payload.get("link_urls", [])[:15]))
-    if not urls:
-        return []
-
-    suspicious_flags = payload.get("suspicious_link_flags", [])
-    # Privacy/API-minimizing strategy: check more URLs only when local link signals already look suspicious.
-    if suspicious_flags:
-        return urls[:8]
-    return urls[:2]
+def reputation_label(entry: Dict[str, Any]) -> str:
+    if entry.get("malicious"):
+        return "malicious"
+    verdict = entry.get("verdict", "")
+    if verdict in {"invalid_url", "provider_error"}:
+        return "suspicious"
+    if verdict in {"not_listed", "not_checked"}:
+        return "clean"
+    return "unknown"
 
 
 @app.get("/")
@@ -92,12 +63,41 @@ def root():
 def analyze_email(payload: SanitizedEmailInput):
     try:
         serialized = payload.model_dump()
-        # Privacy note: only extracted URLs are sent to remote reputation checks, never raw body/subject.
-        urls_to_check = select_urls_for_reputation(serialized)
-        url_reputation = reputation_service.lookup_urls(urls_to_check)
-        enriched = apply_reputation_to_local_result(serialized, url_reputation)
+        link_urls = [link.get("sanitized_url") for link in serialized.get("links", []) if link.get("sanitized_url")]
+        url_reputation = reputation_service.lookup_urls(link_urls[:8])
 
-        result = analyze_with_ai(enriched)
+        rep_map = {
+            (entry.get("normalized_url") or ""): reputation_label(entry)
+            for entry in url_reputation.get("results", [])
+        }
+
+        enriched_links = []
+        for link in serialized.get("links", []):
+            key = (link.get("sanitized_url") or "")
+            enriched_links.append(
+                {
+                    "actual_domain": link.get("actual_domain", ""),
+                    "visible_domain": link.get("visible_domain"),
+                    "reputation": rep_map.get(key, "unknown"),
+                }
+            )
+
+        ai_payload = {
+            "sender_domain": serialized.get("sender_domain", ""),
+            "normalized_subject": serialized.get("normalized_subject", ""),
+            "normalized_body": serialized.get("normalized_body", ""),
+            "links": enriched_links,
+            "local_features": serialized.get("local_features", {}),
+            "local_risk_score": serialized.get("local_risk_score", 0),
+            "local_classification": serialized.get("local_classification", "safe"),
+            "positive_signals": serialized.get("positive_signals", []),
+            "url_reputation_summary": {
+                "malicious": url_reputation.get("malicious", False),
+                "verdict": url_reputation.get("verdict", "unknown"),
+            },
+        }
+
+        result = analyze_with_ai(ai_payload)
         return AnalysisResult(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI analysis failed: {str(e)}")

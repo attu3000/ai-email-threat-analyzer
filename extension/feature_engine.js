@@ -255,6 +255,36 @@
     };
   }
 
+
+  function detectPositiveSignals(subject, body, senderDomain, linkDomains) {
+    const text = `${subject} ${body}`.toLowerCase();
+    const signals = [];
+
+    if (/\b(welcome|create account|confirm (?:your )?email|account confirmation|activate (?:your )?account)\b/.test(text)) {
+      signals.push("welcome_or_account_activation_flow");
+    }
+
+    if (senderDomain && linkDomains.length > 0) {
+      const senderBase = getBaseDomain(senderDomain);
+      const linkBases = dedupe(linkDomains.map((d) => getBaseDomain(d)).filter(Boolean));
+      if (linkBases.length === 1 && linkBases[0] === senderBase) {
+        signals.push("sender_domain_matches_service_domain");
+        signals.push("links_all_point_to_same_domain");
+      } else if (linkBases.length === 1) {
+        signals.push("links_all_point_to_same_domain");
+      }
+    }
+
+    return signals;
+  }
+
+  function detectCoerciveUrgency(body) {
+    const lowered = body.toLowerCase();
+    const coercive = /\b(immediately|right away|asap|within\s+(?:1|2)\s+hours?|within\s+\d+\s+minutes?|avoid\s+suspension|account\s+will\s+be\s+(?:locked|suspended|disabled))\b/.test(lowered);
+    const weak = /\bwithin\s+(?:\d+\s+days?|30\s+days)\b/.test(lowered);
+    return { coercive, weak };
+  }
+
   function buildSanitizedFeatures(email) {
     const sender = normalizeText(email?.sender);
     const subject = normalizeText(email?.subject);
@@ -265,6 +295,8 @@
     const genericGreeting = detectGenericGreeting(body);
     const brandSignals = detectBrandImpersonation(`${subject} ${body}`, senderDomain);
     const linkSignals = detectLinkSignals(email?.links || [], senderDomain);
+    const positiveSignals = detectPositiveSignals(subject, body, senderDomain, linkSignals.link_domains);
+    const urgencyProfile = detectCoerciveUrgency(body);
 
     return {
       sender_domain: senderDomain,
@@ -277,7 +309,9 @@
       suspicious_link_flags: linkSignals.suspicious_link_flags,
       generic_greeting: genericGreeting,
       domain_mismatch: linkSignals.domain_mismatch,
-      brand_impersonation_signals: brandSignals
+      brand_impersonation_signals: brandSignals,
+      positive_signals: positiveSignals,
+      urgency_profile: urgencyProfile
     };
   }
 
