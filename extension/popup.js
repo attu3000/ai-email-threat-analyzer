@@ -26,17 +26,85 @@ function buildFallbackResult(localRisk) {
   };
 }
 
+function clampRiskScore(score) {
+  const numericScore = Number(score);
+  if (!Number.isFinite(numericScore)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Math.round(numericScore)));
+}
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatClassification(classification = "") {
+  if (!classification) {
+    return "Unknown";
+  }
+
+  return classification
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function renderList(items = [], emptyLabel) {
+  if (!Array.isArray(items) || !items.length) {
+    return `<li class="empty-item">${escapeHtml(emptyLabel)}</li>`;
+  }
+
+  return items.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+}
+
 function renderResult(data) {
-  resultEl.textContent =
-    `Classification: ${data.classification}\n` +
-    `Risk Score: ${data.risk_score}\n\n` +
-    `Reasons:\n- ${data.reasons.join("\n- ")}\n\n` +
-    `Highlighted Phrases:\n- ${(data.highlighted_phrases || []).join("\n- ")}\n\n` +
-    `Recommended Action:\n${data.recommended_action}`;
+  const classification = data?.classification || "unknown";
+  const riskScore = clampRiskScore(data?.risk_score);
+  const reasons = Array.isArray(data?.reasons) ? data.reasons : [];
+  const highlightedPhrases = Array.isArray(data?.highlighted_phrases) ? data.highlighted_phrases : [];
+  const recommendedAction = data?.recommended_action || getRecommendedAction(classification);
+
+  resultEl.className = `result-card severity-${classification}`;
+  resultEl.innerHTML = `
+    <section class="verdict-card">
+      <div class="verdict-heading">Threat Verdict</div>
+      <div class="verdict-row">
+        <span class="classification-pill">${escapeHtml(formatClassification(classification))}</span>
+        <span class="risk-value">Risk ${riskScore}/100</span>
+      </div>
+      <div class="risk-meter-wrap" aria-label="Risk score ${riskScore} out of 100">
+        <div class="risk-meter-track">
+          <div class="risk-meter-fill" style="width: ${riskScore}%"></div>
+        </div>
+        <div class="risk-meter-labels"><span>Low</span><span>Moderate</span><span>High</span></div>
+      </div>
+    </section>
+
+    <section class="info-section">
+      <h2>Reasons</h2>
+      <ul>${renderList(reasons, "No specific reasons were returned.")}</ul>
+    </section>
+
+    <section class="info-section phrases-section">
+      <h2>Highlighted Phrases</h2>
+      <ul>${renderList(highlightedPhrases, "No risky phrases detected.")}</ul>
+    </section>
+
+    <section class="info-section action-section">
+      <h2>Recommended Action</h2>
+      <p>${escapeHtml(recommendedAction)}</p>
+    </section>
+  `;
 }
 
 scanBtn.addEventListener("click", async () => {
   resultEl.textContent = "";
+  resultEl.className = "";
   statusEl.textContent = "Reading current Gmail message...";
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
