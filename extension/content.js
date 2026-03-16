@@ -29,16 +29,8 @@ function extractLinksFromMessage(messageBodyEl) {
     .filter((link) => link.href);
 }
 
-function getActiveMessageBodyElement() {
-  const bodyCandidates = Array.from(document.querySelectorAll("div.a3s"))
-    .filter((el) => isElementVisible(el) && getText(el));
-
-  if (!bodyCandidates.length) {
-    return null;
-  }
-
-  // In Gmail threads, the latest expanded/active message body typically appears last.
-  return bodyCandidates[bodyCandidates.length - 1];
+function getVisibleMessageBodies() {
+  return Array.from(document.querySelectorAll("div.a3s")).filter((el) => isElementVisible(el) && getText(el));
 }
 
 function getMessageContainerFromBody(messageBodyEl) {
@@ -54,6 +46,17 @@ function getMessageContainerFromBody(messageBodyEl) {
   );
 }
 
+function getActiveMessageContainer() {
+  const bodyCandidates = getVisibleMessageBodies();
+  if (!bodyCandidates.length) {
+    return null;
+  }
+
+  // In Gmail threads, the latest expanded/active message body typically appears last.
+  const activeBody = bodyCandidates[bodyCandidates.length - 1];
+  return getMessageContainerFromBody(activeBody);
+}
+
 function extractSenderFromMessageContainer(messageContainerEl) {
   if (!messageContainerEl) {
     return "";
@@ -66,16 +69,27 @@ function extractSenderFromMessageContainer(messageContainerEl) {
   );
 }
 
+function extractMessageBodyFromContainer(messageContainerEl) {
+  if (!messageContainerEl) {
+    return null;
+  }
+
+  const visibleBodies = Array.from(messageContainerEl.querySelectorAll("div.a3s")).filter((el) => isElementVisible(el) && getText(el));
+  if (!visibleBodies.length) {
+    return null;
+  }
+
+  return visibleBodies[visibleBodies.length - 1];
+}
+
 function extractGmailEmail() {
-  // Gmail selectors can change; we use fallback selectors to preserve compatibility.
   const subject =
     getText(document.querySelector("h2[data-thread-perm-id]")) ||
     getText(document.querySelector("h2.hP"));
 
-  const messageBodyEl = getActiveMessageBodyElement();
-  const messageContainerEl = getMessageContainerFromBody(messageBodyEl);
+  const messageContainerEl = getActiveMessageContainer();
+  const messageBodyEl = extractMessageBodyFromContainer(messageContainerEl);
   const sender = extractSenderFromMessageContainer(messageContainerEl);
-
   const body = getText(messageBodyEl);
   const links = extractLinksFromMessage(messageBodyEl);
 

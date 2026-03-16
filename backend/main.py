@@ -22,6 +22,7 @@ class LinkInput(BaseModel):
     visible_domain: Optional[str] = None
     sanitized_url: Optional[str] = None
     reputation: str = "unknown"
+    is_hosted_content_platform: bool = False
 
 
 class SanitizedEmailInput(BaseModel):
@@ -29,10 +30,9 @@ class SanitizedEmailInput(BaseModel):
     normalized_subject: str = ""
     normalized_body: str = ""
     links: List[LinkInput] = Field(default_factory=list)
-    local_features: Dict[str, Any] = Field(default_factory=dict)
+    local_evidence: Dict[str, Any] = Field(default_factory=dict)
     local_risk_score: int = 0
     local_classification: str = "safe"
-    positive_signals: List[str] = Field(default_factory=list)
 
 
 class AnalysisResult(BaseModel):
@@ -79,6 +79,7 @@ def analyze_email(payload: SanitizedEmailInput):
                     "actual_domain": link.get("actual_domain", ""),
                     "visible_domain": link.get("visible_domain"),
                     "reputation": rep_map.get(key, "unknown"),
+                    "is_hosted_content_platform": bool(link.get("is_hosted_content_platform", False)),
                 }
             )
 
@@ -87,12 +88,12 @@ def analyze_email(payload: SanitizedEmailInput):
             "normalized_subject": serialized.get("normalized_subject", ""),
             "normalized_body": serialized.get("normalized_body", ""),
             "links": enriched_links,
-            "local_features": serialized.get("local_features", {}),
+            "local_evidence": serialized.get("local_evidence", {}),
             "local_risk_score": serialized.get("local_risk_score", 0),
             "local_classification": serialized.get("local_classification", "safe"),
-            "positive_signals": serialized.get("positive_signals", []),
             "url_reputation_summary": {
                 "malicious": url_reputation.get("malicious", False),
+                "suspicious": url_reputation.get("verdict") in {"invalid_url", "provider_error"},
                 "verdict": url_reputation.get("verdict", "unknown"),
             },
         }

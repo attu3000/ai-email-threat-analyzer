@@ -1,61 +1,19 @@
 (function () {
-  const CATEGORY_RULES = {
-    urgency_language: [
-      /\b(urgent|immediately|asap|right away|action required|important notice|final notice|last reminder)\b/i,
-      /\b(respond|act|review|update)\s+(today|now)\b/i
-    ],
-    deadline_pressure: [
-      /\b(within|in)\s+\d+\s*(minute|minutes|hour|hours|day|days)\b/i,
-      /\bby\s+(end of day|eod|tomorrow|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\b/i,
-      /\b(deadline|expires?|expiration|time-?sensitive)\b/i
-    ],
-    threat_of_consequence: [
-      /\b(account|access|profile|service)\s+(will|may)\s+(be\s+)?(locked|suspended|disabled|terminated|restricted)\b/i,
-      /\b(failure to comply|or else|avoid (?:suspension|termination)|permanent loss)\b/i
-    ],
-    credential_request: [
-      /\b(verify|confirm|validate|re-authenticate)\s+(your\s+)?(account|identity|credentials)\b/i,
-      /\b(reset|update)\s+(your\s+)?password\b/i,
-      /\b(log\s?in|sign\s?in)\s+(now|here|immediately)?\b/i,
-      /\b(mfa|2fa|one-time code|otp|security code)\b/i
-    ],
-    payment_request: [
-      /\b(invoice|payment|billing|overdue|outstanding|past due|wire transfer)\b/i,
-      /\b(card|bank|payment method)\s+(expired|failed|declined|needs update)\b/i
-    ],
-    reward_bait: [
-      /\b(prize|reward|gift card|bonus|lottery|winner|claim now)\b/i,
-      /\b(free|exclusive)\s+(offer|access|trial)\b/i
-    ],
-    account_security_action: [
-      /\b(unusual|suspicious)\s+(login|activity|attempt)\b/i,
-      /\b(security alert|security check|breach detected)\b/i,
-      /\b(secure|protect)\s+your\s+account\b/i
-    ]
-  };
-
-  const GENERIC_GREETING_PATTERNS = [
-    /\b(dear (?:customer|user|member|client))\b/i,
-    /\b(hello|hi|greetings)\b\s*(customer|user|member)?\b/i,
-    /\b(to whom it may concern)\b/i
-  ];
-
-  const BRAND_TERMS = [
-    "microsoft",
-    "google",
-    "apple",
-    "paypal",
-    "amazon",
-    "university",
-    "it help desk"
-  ];
-
-  const SUSPICIOUS_DOMAIN_PATTERNS = [
-    /\bsecure-login\b/i,
-    /\baccount-?verify\b/i,
-    /\bupdate-?security\b/i,
-    /\blogin-?confirm\b/i,
-    /\bfree-?gift\b/i
+  const HOSTED_CONTENT_DOMAINS = [
+    "sites.google.com",
+    "storage.googleapis.com",
+    "drive.google.com",
+    "docs.google.com",
+    "github.io",
+    "notion.site",
+    "webflow.io",
+    "pages.dev",
+    "netlify.app",
+    "vercel.app",
+    "firebaseapp.com",
+    "onrender.com",
+    "azurewebsites.net",
+    "herokuapp.com"
   ];
 
   const SUSPICIOUS_TLDS = new Set(["zip", "top", "click", "gq", "work", "country", "kim", "xyz"]);
@@ -81,55 +39,6 @@
 
   function dedupe(values) {
     return Array.from(new Set(values.filter(Boolean)));
-  }
-
-  function collectCategoryMatches(text, patterns, label) {
-    const hits = [];
-    for (const pattern of patterns) {
-      const match = text.match(pattern);
-      if (match) {
-        hits.push({ category: label, phrase: normalizeText(match[0]) });
-      }
-    }
-    return hits;
-  }
-
-  function detectCategoryFlags(subject, body) {
-    const subjectFlags = {};
-    const bodyFlags = {};
-    const highlighted = [];
-
-    for (const [category, patterns] of Object.entries(CATEGORY_RULES)) {
-      const subjectHits = collectCategoryMatches(subject, patterns, category);
-      const bodyHits = collectCategoryMatches(body, patterns, category);
-
-      subjectFlags[category] = subjectHits.length > 0;
-      bodyFlags[category] = bodyHits.length > 0;
-
-      highlighted.push(...subjectHits.map((h) => h.phrase));
-      highlighted.push(...bodyHits.map((h) => h.phrase));
-    }
-
-    return {
-      subject_flags: subjectFlags,
-      body_flags: bodyFlags,
-      highlighted_phrases: dedupe(highlighted).slice(0, 20)
-    };
-  }
-
-  function detectGenericGreeting(body) {
-    return GENERIC_GREETING_PATTERNS.some((pattern) => pattern.test(body));
-  }
-
-  function detectBrandImpersonation(text, senderDomain) {
-    const lowered = text.toLowerCase();
-    const signals = [];
-    for (const term of BRAND_TERMS) {
-      if (lowered.includes(term) && senderDomain && !senderDomain.includes(term.replace(/\s+/g, ""))) {
-        signals.push(`mentions_${term.replace(/\s+/g, "_")}`);
-      }
-    }
-    return dedupe(signals);
   }
 
   function getBaseDomain(hostname) {
@@ -159,39 +68,62 @@
     return /\b(auth|login|support|help|cdn|static|assets|status|accounts?)\b/i.test(hostname || "");
   }
 
-  function isSenderLinkRelated(senderDomain, hostname) {
-    if (!senderDomain || !hostname) {
-      return false;
+  function senderLinkRelationship(senderDomain, linkDomains) {
+    if (!senderDomain || !linkDomains.length) {
+      return "mismatch";
     }
 
     const senderBase = getBaseDomain(senderDomain);
-    const linkBase = getBaseDomain(hostname);
+    const linkBases = dedupe(linkDomains.map((d) => getBaseDomain(d)).filter(Boolean));
 
-    if (!senderBase || !linkBase) {
-      return false;
+    if (!senderBase || !linkBases.length) {
+      return "mismatch";
     }
 
-    if (senderBase === linkBase) {
-      return true;
+    if (linkBases.every((base) => base === senderBase)) {
+      return "match";
     }
 
     const senderTokens = getDomainTokens(senderBase);
-    const linkTokens = getDomainTokens(linkBase);
-    const sharesBrandToken = senderTokens.some((token) => linkTokens.includes(token));
+    const related = linkDomains.some((hostname) => {
+      const linkBase = getBaseDomain(hostname);
+      const linkTokens = getDomainTokens(linkBase);
+      const sharesBrandToken = senderTokens.some((token) => linkTokens.includes(token));
+      return sharesBrandToken && (isCommonServiceSubdomain(hostname) || isCommonServiceSubdomain(senderDomain));
+    });
 
-    // Allow common same-brand auth/support/cdn patterns when there are no other strong signals.
-    if (sharesBrandToken && (isCommonServiceSubdomain(hostname) || isCommonServiceSubdomain(senderDomain))) {
-      return true;
+    if (related) {
+      return "related";
     }
 
-    return sharesBrandToken;
+    return "mismatch";
   }
 
-  function detectLinkSignals(links, senderDomain) {
-    const suspiciousFlags = [];
+  function hasSuspiciousSenderDomainStructure(senderDomain) {
+    if (!senderDomain) {
+      return false;
+    }
+
+    const hyphenCount = (senderDomain.match(/-/g) || []).length;
+    const digitCount = (senderDomain.match(/\d/g) || []).length;
+    const labels = senderDomain.split(".").filter(Boolean);
+    const longestLabel = labels.reduce((max, part) => Math.max(max, part.length), 0);
+
+    return hyphenCount >= 3 || digitCount >= 5 || longestLabel > 30;
+  }
+
+  function isHostedContentDomain(hostname) {
+    const base = getBaseDomain(hostname);
+    return HOSTED_CONTENT_DOMAINS.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`) || base === domain);
+  }
+
+  function detectLinkSignals(links) {
     const linkDomains = [];
-    const linkUrls = [];
-    let domainMismatch = false;
+    let visibleActualMismatch = false;
+    let ipLinkPresent = false;
+    let punycodePresent = false;
+    let suspiciousTldPresent = false;
+    let hostedContentDomainPresent = false;
 
     for (const link of links || []) {
       const href = normalizeText(link.href);
@@ -201,117 +133,67 @@
       }
 
       const hostname = toHostname(href);
-      if (hostname) {
-        linkDomains.push(hostname);
-        linkUrls.push(href);
+      if (!hostname) {
+        continue;
       }
 
-      if (!/^https:\/\//i.test(href)) {
-        suspiciousFlags.push("non_https_link");
-      }
-      if (/https?:\/\/(\d{1,3}\.){3}\d{1,3}/i.test(href)) {
-        suspiciousFlags.push("ip_address_link");
+      linkDomains.push(hostname);
+
+      if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
+        ipLinkPresent = true;
       }
       if (hostname.includes("xn--")) {
-        suspiciousFlags.push("punycode_link");
-      }
-      if ((hostname.match(/-/g) || []).length >= 3) {
-        suspiciousFlags.push("excessive_hyphens_link");
-      }
-      if (hostname.length > 45) {
-        suspiciousFlags.push("long_hostname_link");
+        punycodePresent = true;
       }
       const tld = hostname.split(".").pop() || "";
       if (SUSPICIOUS_TLDS.has(tld)) {
-        suspiciousFlags.push("suspicious_tld_link");
+        suspiciousTldPresent = true;
       }
-      if (/\b(login|verify|secure|password|credential|wallet|invoice)\b/i.test(hostname)) {
-        suspiciousFlags.push("credential_lure_hostname_link");
-      }
-      if (SUSPICIOUS_DOMAIN_PATTERNS.some((pattern) => pattern.test(hostname))) {
-        suspiciousFlags.push("suspicious_domain_pattern");
-      }
-
-      if (senderDomain && hostname) {
-        if (!isSenderLinkRelated(senderDomain, hostname)) {
-          domainMismatch = true;
-        }
+      if (isHostedContentDomain(hostname)) {
+        hostedContentDomainPresent = true;
       }
 
       if (/^https?:\/\//i.test(text)) {
         const textHost = toHostname(text);
-        if (textHost && hostname && textHost !== hostname) {
-          suspiciousFlags.push("visible_destination_mismatch");
+        if (textHost && textHost !== hostname) {
+          visibleActualMismatch = true;
         }
       }
     }
 
+    const uniqueDomains = dedupe(linkDomains);
+
     return {
-      link_domains: dedupe(linkDomains),
-      link_urls: dedupe(linkUrls).slice(0, 15),
+      link_domains: uniqueDomains,
       link_count: (links || []).length,
-      suspicious_link_flags: dedupe(suspiciousFlags),
-      domain_mismatch: domainMismatch
+      links_all_same_domain: uniqueDomains.length <= 1,
+      visible_actual_mismatch: visibleActualMismatch,
+      hosted_content_domain_present: hostedContentDomainPresent,
+      ip_link_present: ipLinkPresent,
+      punycode_present: punycodePresent,
+      suspicious_tld_present: suspiciousTldPresent
     };
-  }
-
-
-  function detectPositiveSignals(subject, body, senderDomain, linkDomains) {
-    const text = `${subject} ${body}`.toLowerCase();
-    const signals = [];
-
-    if (/\b(welcome|create account|confirm (?:your )?email|account confirmation|activate (?:your )?account)\b/.test(text)) {
-      signals.push("welcome_or_account_activation_flow");
-    }
-
-    if (senderDomain && linkDomains.length > 0) {
-      const senderBase = getBaseDomain(senderDomain);
-      const linkBases = dedupe(linkDomains.map((d) => getBaseDomain(d)).filter(Boolean));
-      if (linkBases.length === 1 && linkBases[0] === senderBase) {
-        signals.push("sender_domain_matches_service_domain");
-        signals.push("links_all_point_to_same_domain");
-      } else if (linkBases.length === 1) {
-        signals.push("links_all_point_to_same_domain");
-      }
-    }
-
-    return signals;
-  }
-
-  function detectCoerciveUrgency(body) {
-    const lowered = body.toLowerCase();
-    const coercive = /\b(immediately|right away|asap|within\s+(?:1|2)\s+hours?|within\s+\d+\s+minutes?|avoid\s+suspension|account\s+will\s+be\s+(?:locked|suspended|disabled))\b/.test(lowered);
-    const weak = /\bwithin\s+(?:\d+\s+days?|30\s+days)\b/.test(lowered);
-    return { coercive, weak };
   }
 
   function buildSanitizedFeatures(email) {
     const sender = normalizeText(email?.sender);
-    const subject = normalizeText(email?.subject);
-    const body = normalizeText(email?.body);
     const senderDomain = extractDomain(sender);
 
-    const categorySignals = detectCategoryFlags(subject, body);
-    const genericGreeting = detectGenericGreeting(body);
-    const brandSignals = detectBrandImpersonation(`${subject} ${body}`, senderDomain);
-    const linkSignals = detectLinkSignals(email?.links || [], senderDomain);
-    const positiveSignals = detectPositiveSignals(subject, body, senderDomain, linkSignals.link_domains);
-    const urgencyProfile = detectCoerciveUrgency(body);
+    const linkSignals = detectLinkSignals(email?.links || []);
+    const senderLinkMatch = senderLinkRelationship(senderDomain, linkSignals.link_domains);
 
     return {
       sender_domain: senderDomain,
-      subject_flags: categorySignals.subject_flags,
-      body_flags: categorySignals.body_flags,
-      highlighted_phrases: categorySignals.highlighted_phrases,
       link_domains: linkSignals.link_domains,
-      link_urls: linkSignals.link_urls,
       link_count: linkSignals.link_count,
-      suspicious_link_flags: linkSignals.suspicious_link_flags,
-      generic_greeting: genericGreeting,
-      domain_mismatch: linkSignals.domain_mismatch,
-      brand_impersonation_signals: brandSignals,
-      positive_signals: positiveSignals,
-      urgency_profile: urgencyProfile
+      links_all_same_domain: linkSignals.links_all_same_domain,
+      sender_link_match: senderLinkMatch,
+      visible_actual_mismatch: linkSignals.visible_actual_mismatch,
+      hosted_content_domain_present: linkSignals.hosted_content_domain_present,
+      ip_link_present: linkSignals.ip_link_present,
+      punycode_present: linkSignals.punycode_present,
+      suspicious_tld_present: linkSignals.suspicious_tld_present,
+      suspicious_sender_domain_structure: hasSuspiciousSenderDomainStructure(senderDomain)
     };
   }
 

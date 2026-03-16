@@ -12,7 +12,7 @@ function getRecommendedAction(classification) {
   return "No major phishing signals detected. Continue normal caution practices.";
 }
 
-function buildFallbackResult(features, localRisk) {
+function buildFallbackResult(localRisk) {
   const reasons = localRisk.flags.length
     ? localRisk.flags.map((flag) => flag.replace(/_/g, " "))
     : ["No high-confidence phishing patterns detected"];
@@ -21,7 +21,7 @@ function buildFallbackResult(features, localRisk) {
     classification: localRisk.classification,
     risk_score: localRisk.risk_score,
     reasons,
-    highlighted_phrases: features.highlighted_phrases || [],
+    highlighted_phrases: [],
     recommended_action: getRecommendedAction(localRisk.classification)
   };
 }
@@ -83,7 +83,7 @@ scanBtn.addEventListener("click", async () => {
 
       data = await apiRes.json();
     } catch (_) {
-      data = buildFallbackResult(features, localRisk);
+      data = buildFallbackResult(localRisk);
       statusEl.textContent = "Backend unavailable. Showing local analysis.";
       renderResult(data);
       return;
